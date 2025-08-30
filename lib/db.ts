@@ -9,7 +9,9 @@ export const db = mysql.createPool({
     ssl:{
         rejectUnauthorized: false
     },
-    charset: 'utf8mb4'
+    charset: 'utf8mb4',
+    connectionLimit: 10,
+
 })
 
 
