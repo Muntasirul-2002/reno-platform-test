@@ -1,4 +1,4 @@
-// app/api/schools/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { put } from '@vercel/blob';
@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
     const state = formData.get("state") as string;
     const contact = formData.get("contact") as string;
     const email_id = formData.get("email_id") as string;
+
+  
     if (!name || !city || !state) {
       return NextResponse.json(
         { error: "Name, city, and state are required" },
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+
     const [result] = await db.query(
       `INSERT INTO schools (name, address, city, state, contact, email_id, image) 
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -91,6 +94,13 @@ export async function GET() {
        FROM schools 
        ORDER BY name ASC`
     ) as MySQLSelectResult;
+
+    console.log('Fetched schools:', schools.length);
+    schools.forEach(school => {
+      if (school.image) {
+        console.log(`School ${school.name} has image: ${school.image}`);
+      }
+    });
 
     return NextResponse.json({ 
       success: true, 
