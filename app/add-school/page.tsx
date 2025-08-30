@@ -2,6 +2,14 @@
 import Link from "next/link";
 import { useState } from "react";
 
+interface ApiResponse {
+  success: boolean;
+  error?: string;
+  message?: string;
+  id?: number;
+  imageUrl?: string;
+}
+
 export default function SchoolForm() {
   const [formData, setFormData] = useState({
     name: "",
@@ -10,12 +18,12 @@ export default function SchoolForm() {
     state: "",
     contact: "",
     email_id: "",
-    Image: "",
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -26,6 +34,18 @@ export default function SchoolForm() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+     
+      if (file.size > 10 * 1024 * 1024) {
+        alert("File size too large. Maximum size is 10MB.");
+        return;
+      }
+
+   
+      if (!file.type.startsWith('image/')) {
+        alert("Please select an image file.");
+        return;
+      }
+
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -38,6 +58,8 @@ export default function SchoolForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setUploadStatus("Preparing upload...");
+
     try {
       const submitData = new FormData();
       submitData.append("name", formData.name);
@@ -46,20 +68,26 @@ export default function SchoolForm() {
       submitData.append("state", formData.state);
       submitData.append("contact", formData.contact);
       submitData.append("email_id", formData.email_id);
+      
       if (selectedFile) {
+        setUploadStatus("Uploading image...");
         submitData.append("image", selectedFile);
       }
+
+      setUploadStatus("Saving school data...");
 
       const res = await fetch("/api/schools", {
         method: "POST",
         body: submitData,
       });
 
-      const result = await res.json();
+      const result: ApiResponse = await res.json();
 
-      if (res.ok) {
-        alert("School added successfully!");
+      if (res.ok && result.success) {
+        setUploadStatus("Success!");
+        alert(result.message || "School added successfully!");
 
+        // Reset form
         setFormData({
           name: "",
           address: "",
@@ -67,23 +95,25 @@ export default function SchoolForm() {
           state: "",
           contact: "",
           email_id: "",
-          Image: "",
         });
         setSelectedFile(null);
         setImagePreview("");
+        setUploadStatus("");
       } else {
-        alert(result.error || "Something went wrong");
+        throw new Error(result.error || "Something went wrong");
       }
     } catch (error) {
       console.error(error);
-      alert("Something went wrong");
+      const errorMessage = error instanceof Error ? error.message : "Something went wrong";
+      alert(errorMessage);
+      setUploadStatus("Upload failed");
     } finally {
       setLoading(false);
+      setTimeout(() => setUploadStatus(""), 3000);
     }
   };
 
   return (
-   <>
     <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
       <form
         onSubmit={handleSubmit}
@@ -96,7 +126,7 @@ export default function SchoolForm() {
         <input
           type="text"
           name="name"
-          placeholder="School Name"
+          placeholder="School Name *"
           value={formData.name}
           onChange={handleChange}
           required
@@ -108,24 +138,26 @@ export default function SchoolForm() {
           placeholder="Address"
           value={formData.address}
           onChange={handleChange}
-          className="w-full p-3 border rounded-lg focus:ring focus:ring-blue-300"
+          className="w-full p-3 border rounded-lg focus:ring focus:ring-blue-300 h-20"
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
             type="text"
             name="city"
-            placeholder="City"
+            placeholder="City *"
             value={formData.city}
             onChange={handleChange}
+            required
             className="w-full p-3 border rounded-lg focus:ring focus:ring-blue-300"
           />
           <input
             type="text"
             name="state"
-            placeholder="State"
+            placeholder="State *"
             value={formData.state}
             onChange={handleChange}
+            required
             className="w-full p-3 border rounded-lg focus:ring focus:ring-blue-300"
           />
         </div>
@@ -151,14 +183,18 @@ export default function SchoolForm() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            School Image
+            School Image (Max 10MB)
           </label>
           <input
             type="file"
             accept="image/*"
             onChange={handleFileChange}
             className="w-full border p-2 rounded-lg"
+            disabled={loading}
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Supported formats: JPG, PNG, GIF, WebP
+          </p>
         </div>
 
         {imagePreview && (
@@ -171,24 +207,31 @@ export default function SchoolForm() {
           </div>
         )}
 
+        {uploadStatus && (
+          <div className="text-center">
+            <p className={`text-sm font-medium ${
+              uploadStatus.includes('failed') ? 'text-red-600' : 
+              uploadStatus === 'Success!' ? 'text-green-600' : 'text-blue-600'
+            }`}>
+              {uploadStatus}
+            </p>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+          className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? "Submitting..." : "Submit"}
+          {loading ? "Processing..." : "Add School"}
         </button>
 
         <div className="underline text-blue-700 font-bold text-center">
-           <Link href="/view-schools">
-          <span>
-            View Schools
-          </span>
-           </Link>
+          <Link href="/view-schools">
+            <span>View Schools</span>
+          </Link>
         </div>
       </form>
     </div>
-      
-   </>
   );
 }

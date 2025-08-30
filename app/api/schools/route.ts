@@ -1,8 +1,7 @@
+// app/api/schools/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-
+import { put } from '@vercel/blob';
 
 interface QueryResult {
   insertId: number;
@@ -19,7 +18,9 @@ interface School {
   email_id: string;
   image: string | null;
 }
+
 type MySQLResult = [QueryResult, unknown[]];
+type MySQLSelectResult = [School[], unknown[]];
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,53 +31,65 @@ export async function POST(req: NextRequest) {
     const state = formData.get("state") as string;
     const contact = formData.get("contact") as string;
     const email_id = formData.get("email_id") as string;
+    if (!name || !city || !state) {
+      return NextResponse.json(
+        { error: "Name, city, and state are required" },
+        { status: 400 }
+      );
+    }
 
     let imageUrl: string | null = null;
     const imageFile = formData.get("image") as File | null;
 
     if (imageFile && imageFile.size > 0) {
-      const uploadsDir = path.join(process.cwd(), "public/uploads");
       try {
-        await mkdir(uploadsDir, { recursive: true });
-      } catch (error) {
-        console.log(error)
+        const timestamp = Date.now();
+        const extension = imageFile.name.split('.').pop();
+        const fileName = `schools/${timestamp}-${name.replace(/\s+/g, '-').toLowerCase()}.${extension}`;
+        
+        const blob = await put(fileName, imageFile, {
+          access: 'public',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+        
+        imageUrl = blob.url;
+      } catch (uploadError) {
+        console.error("Image upload failed:", uploadError);
+        return NextResponse.json(
+          { error: "Failed to upload image" },
+          { status: 500 }
+        );
       }
-      const timestamp = Date.now();
-      const originalName = imageFile.name;
-      const extension = path.extname(originalName);
-      const fileName = `${timestamp}-${path.basename(originalName, extension)}${extension}`;
-      const bytes = await imageFile.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      
-      const filePath = path.join(uploadsDir, fileName);
-      await writeFile(filePath, buffer);
-      
-      imageUrl = `/uploads/${fileName}`;
     }
+
     const [result] = await db.query(
-      `INSERT INTO schools (name, address, city, state, contact, email_id, image) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO schools (name, address, city, state, contact, email_id, image) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [name, address, city, state, contact, email_id, imageUrl]
     ) as MySQLResult;
 
     return NextResponse.json({ 
       success: true, 
       id: result.insertId,
-      imageUrl: imageUrl 
+      imageUrl: imageUrl,
+      message: "School added successfully"
     });
+
   } catch (error) {
     console.error("Error adding school:", error);
     return NextResponse.json(
-      { error: "Failed to add school" }, 
+      { error: "Failed to add school. Please try again." }, 
       { status: 500 }
     );
   }
 }
-type MySQLSelectResult = [School[], unknown[]];
 
 export async function GET() {
   try {
     const [schools] = await db.query(
-      `SELECT id, name, address, city, state, contact, email_id, image FROM schools ORDER BY name ASC`
+      `SELECT id, name, address, city, state, contact, email_id, image 
+       FROM schools 
+       ORDER BY name ASC`
     ) as MySQLSelectResult;
 
     return NextResponse.json({ 
@@ -84,6 +97,7 @@ export async function GET() {
       schools: schools,
       count: schools.length 
     });
+
   } catch (error) {
     console.error("Error fetching schools:", error);
     return NextResponse.json(
